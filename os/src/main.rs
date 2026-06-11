@@ -11,9 +11,13 @@
 #![deny(warnings)]
 #![no_std]
 #![no_main]
+//通过 PanicInfo::message 获取报错信息
 #![feature(panic_info_message)]
 
 use core::arch::global_asm;
+
+// 已经在 console.rs 中手动实现
+#[allow(unused_imports)]
 use log::*;
 
 #[macro_use]
