@@ -7,6 +7,7 @@ pub struct TrapContext {
     /// CSR sstatus      
     pub sstatus: Sstatus,
     /// CSR sepc
+    // Trap 发生之前最后一条指令的地址
     pub sepc: usize,
 }
 

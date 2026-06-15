@@ -31,6 +31,7 @@ pub fn init() {
         fn __alltraps();
     }
     unsafe {
+        // stvec：Trap 处理代码的入口地址
         stvec::write(__alltraps as usize, TrapMode::Direct);
     }
 }
@@ -42,7 +43,7 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
     let stval = stval::read(); // get extra value
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
-            cx.sepc += 4;
+            cx.sepc += 4; // 4 为 ecall 指令的码长
             cx.x[10] = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
         }
         Trap::Exception(Exception::StoreFault) | Trap::Exception(Exception::StorePageFault) => {
@@ -61,7 +62,7 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
             );
         }
     }
-    cx
+    cx // 返回给 a0
 }
 
 pub use context::TrapContext;

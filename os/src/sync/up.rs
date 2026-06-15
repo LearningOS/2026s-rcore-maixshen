@@ -8,8 +8,12 @@ use core::cell::{RefCell, RefMut};
 ///
 /// In order to get mutable reference of inner data, call
 /// `exclusive_access`.
+
+// 允许我们在 单核 上安全使用可变全局变量。
 pub struct UPSafeCell<T> {
     /// inner data
+    // 通常使用 RefCell 包裹可被借用的值，随后调用 borrow 和 borrow_mut 便可
+    // 发起借用并获得一个对值的不可变/可变借用的标志，它们可以像引用一样使用。
     inner: RefCell<T>,
 }
 

@@ -87,7 +87,8 @@ pub fn rust_main() -> ! {
         boot_stack_top as usize, boot_stack_lower_bound as usize
     );
     error!("[kernel] .bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
-    trap::init();
+
+    trap::init(); // 用户执行 ecall，会跳转到 stvec 所指向的地址，因此需要把 __alltraps 保存到 stvec 中
     batch::init();
     batch::run_next_app();
 }

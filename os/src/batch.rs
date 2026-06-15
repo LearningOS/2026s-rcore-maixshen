@@ -11,11 +11,13 @@ const MAX_APP_NUM: usize = 16;
 const APP_BASE_ADDRESS: usize = 0x80400000;
 const APP_SIZE_LIMIT: usize = 0x20000;
 
+// 内核栈
 #[repr(align(4096))]
 struct KernelStack {
     data: [u8; KERNEL_STACK_SIZE],
 }
 
+// 用户栈
 #[repr(align(4096))]
 struct UserStack {
     data: [u8; USER_STACK_SIZE],
@@ -29,6 +31,7 @@ static USER_STACK: UserStack = UserStack {
 };
 
 impl KernelStack {
+    // 找到 高地址，后续从 高地址 向下压栈
     fn get_sp(&self) -> usize {
         self.data.as_ptr() as usize + KERNEL_STACK_SIZE
     }
@@ -99,9 +102,11 @@ impl AppManager {
     }
 }
 
+// 全局变量需要在运行时发生变化，即需要重新设置初始值之后才能使用。
 lazy_static! {
     static ref APP_MANAGER: UPSafeCell<AppManager> = unsafe {
         UPSafeCell::new({
+            // 找到 link_app.S 中提供的符号 _num_app
             extern "C" {
                 fn _num_app();
             }
@@ -134,9 +139,13 @@ pub fn print_app_info() {
 pub fn run_next_app() -> ! {
     let mut app_manager = APP_MANAGER.exclusive_access();
     let current_app = app_manager.get_current_app();
+
+    // load_app 会把存储在镜像里的第 current_app 个程序的二进制代码，
+    // 拷贝到固定的物理地址 0x80400000 (APP_BASE_ADDRESS)
     unsafe {
         app_manager.load_app(current_app);
     }
+
     app_manager.move_to_next_app();
     drop(app_manager);
     // before this we have to drop local variables related to resources manually
@@ -144,6 +153,7 @@ pub fn run_next_app() -> ! {
     extern "C" {
         fn __restore(cx_addr: usize);
     }
+    // __restore 会使用 a0 寄存器，而 a0 寄存器保存的是函数 push_context 的返回值，数值是内核栈的栈顶
     unsafe {
         __restore(KERNEL_STACK.push_context(TrapContext::app_init_context(
             APP_BASE_ADDRESS,
