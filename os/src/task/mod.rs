@@ -14,7 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM, SYSCALL_COUNT};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -54,6 +54,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_times: [0; SYSCALL_COUNT],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -138,6 +139,25 @@ impl TaskManager {
             panic!("\nAll applications completed!");
         }
     }
+
+    fn increment_syscall_count(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if syscall_id < SYSCALL_COUNT {
+            inner.tasks[current].syscall_times[syscall_id] += 1;
+        }
+        drop(inner);
+    }
+
+    fn get_syscall_times(&self, syscall_id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if syscall_id < SYSCALL_COUNT {
+            return inner.tasks[current].syscall_times[syscall_id];
+        }
+        drop(inner);
+        0
+    }
 }
 
 /// Run the first task in task list.
@@ -171,4 +191,14 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Increment the syscall count of the current task.
+pub fn increment_syscall_count(syscall_id: usize) {
+    TASK_MANAGER.increment_syscall_count(syscall_id);
+}
+
+/// Get the syscall count of the current task.
+pub fn get_syscall_times(syscall_id: usize) -> usize {
+    TASK_MANAGER.get_syscall_times(syscall_id)
 }
