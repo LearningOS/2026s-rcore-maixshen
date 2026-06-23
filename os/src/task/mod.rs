@@ -15,6 +15,8 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::MapPermission;
+use crate::mm::VirtAddr;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -23,6 +25,8 @@ use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
+
+use crate::config::SYSCALL_COUNT;
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -153,6 +157,59 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn increment_syscall_count(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if syscall_id < SYSCALL_COUNT {
+            inner.tasks[current].syscall_times[syscall_id] += 1;
+        }
+        drop(inner);
+    }
+
+    fn get_syscall_times(&self, syscall_id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if syscall_id < SYSCALL_COUNT {
+            return inner.tasks[current].syscall_times[syscall_id];
+        }
+        drop(inner);
+        0
+    }
+
+    /// mmap
+    fn pro_mmap(&self, start: usize, len: usize, port: &MapPermission) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let crt = inner.current_task;
+        let crt_memset = &mut inner.tasks[crt].memory_set;
+        info!("mmap {:#x} to {:#x}", start >> 12, (start + len) >> 12);
+        if crt_memset.if_overlap(VirtAddr::from(start), VirtAddr::from(start + len)) {
+            drop(inner);
+            return false;
+        }
+
+        crt_memset.insert_framed_area(VirtAddr::from(start), VirtAddr::from(start + len), *port);
+        drop(inner);
+        true
+    }
+
+    /// munmap
+    fn pro_munmap(&self, start: usize, len: usize) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let crt = inner.current_task;
+        let crt_memset = &mut inner.tasks[crt].memory_set;
+        // info!("!!!!!!!!!!!!!{:#x}!!{:#x}", start, start + len);
+        if !crt_memset.if_matched(start, start + len) {
+            drop(inner);
+            return false;
+        }
+        crt_memset.remove_area(
+            VirtAddr::from(VirtAddr::from(start).floor()),
+            VirtAddr::from(VirtAddr::from(start + len).ceil()),
+        );
+        drop(inner);
+        true
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +258,27 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Increment the syscall count of the current task.
+pub fn increment_syscall_count(syscall_id: usize) {
+    TASK_MANAGER.increment_syscall_count(syscall_id);
+}
+
+/// Get the syscall count of the current task.
+pub fn get_syscall_times(syscall_id: usize) -> usize {
+    TASK_MANAGER.get_syscall_times(syscall_id)
+}
+
+/// ...
+pub fn do_task_mmap(start: usize, len: usize, port: usize) -> bool {
+    trace!("Paging Map: {:#x}(inc) ~ {:#x}(exc)", start, start + len);
+    let mut permission = MapPermission::from_bits((port as u8) << 1).unwrap();
+    permission.set(MapPermission::U, true);
+    TASK_MANAGER.pro_mmap(start, len, &permission)
+}
+
+/// ...
+pub fn do_task_munmap(start: usize, len: usize) -> bool {
+    TASK_MANAGER.pro_munmap(start, len)
 }
