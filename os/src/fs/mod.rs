@@ -2,6 +2,7 @@
 
 mod inode;
 mod stdio;
+pub use inode::{link_file, unlink_file};
 
 use crate::mm::UserBuffer;
 
@@ -15,6 +16,8 @@ pub trait File: Send + Sync {
     fn read(&self, buf: UserBuffer) -> usize;
     /// write to the file from buf, return the number of bytes written
     fn write(&self, buf: UserBuffer) -> usize;
+    /// stat the file
+    fn stat(&self, st: &mut Stat) -> isize;
 }
 
 /// The stat of a inode
@@ -30,7 +33,7 @@ pub struct Stat {
     /// number of hard links
     pub nlink: u32,
     /// unused pad
-    pad: [u64; 7],
+    pub pad: [u64; 7],
 }
 
 bitflags! {

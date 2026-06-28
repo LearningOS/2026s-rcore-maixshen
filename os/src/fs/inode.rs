@@ -6,11 +6,13 @@
 //! need to wrap `OSInodeInner` into `UPSafeCell`
 use super::File;
 use crate::drivers::BLOCK_DEVICE;
+use crate::fs::{Stat, StatMode};
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
+use easy_fs::DiskInodeType;
 use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
 
@@ -26,6 +28,15 @@ pub struct OSInode {
 pub struct OSInodeInner {
     offset: usize,
     inode: Arc<Inode>,
+}
+
+/// Link a file
+pub fn link_file(_old_name: &str, _new_name: &str) -> Option<()> {
+    ROOT_INODE.link(_old_name, _new_name)
+}
+/// Unlink a file
+pub fn unlink_file(name: &str) -> Option<()> {
+    ROOT_INODE.unlink(name)
 }
 
 impl OSInode {
@@ -155,5 +166,17 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+
+    fn stat(&self, st: &mut Stat) -> isize {
+        let inner = self.inner.exclusive_access();
+        inner.inode.read_disk_inode(|disk_inode| {
+            st.mode = match disk_inode.type_ {
+                DiskInodeType::File => StatMode::FILE,
+                DiskInodeType::Directory => StatMode::DIR,
+            };
+            st.nlink = disk_inode.nlink;
+        });
+        0
     }
 }
