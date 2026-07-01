@@ -52,4 +52,9 @@ impl Semaphore {
             block_current_and_run_next();
         }
     }
+
+    ///
+    pub fn will_deadlock(&self) -> bool {
+        self.inner.exclusive_access().count < 1
+    }
 }
